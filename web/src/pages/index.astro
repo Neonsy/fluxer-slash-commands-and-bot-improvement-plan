@@ -1,0 +1,39 @@
+---
+import {getCollection, render} from 'astro:content';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+
+const [entry] = await getCollection('prd');
+if (!entry) throw new Error('PRD.md was not loaded into the prd content collection');
+
+const {Content, headings} = await render(entry);
+const onThisPage = headings.filter((heading) => heading.depth === 2);
+---
+
+<BaseLayout title="Fluxer Bot Platform" description={entry.data.description}>
+	<div class="document-layout shell" data-prd-source>
+		<aside class="document-sidebar" data-pagefind-ignore>
+			<nav aria-label="Document contents">
+				<span>Contents</span>
+				{onThisPage.map((heading) => <a href={`#${heading.slug}`}>{heading.text}</a>)}
+			</nav>
+		</aside>
+		<details class="mobile-document-outline" data-pagefind-ignore>
+			<summary>PRD contents</summary>
+			<nav aria-label="Document contents">
+				{onThisPage.map((heading) => <a href={`#${heading.slug}`}>{heading.text}</a>)}
+			</nav>
+		</details>
+
+		<article class="research-prose prd-prose"><Content /></article>
+	</div>
+
+	<script>
+		import {trackDocumentOutline} from '@/lib/document-outline';
+
+		const shell = document.querySelector<HTMLElement>('[data-prd-source]');
+		if (shell) {
+			for (const table of shell.querySelectorAll<HTMLTableElement>('.prd-prose table')) table.tabIndex = 0;
+			trackDocumentOutline(shell);
+		}
+	</script>
+</BaseLayout>

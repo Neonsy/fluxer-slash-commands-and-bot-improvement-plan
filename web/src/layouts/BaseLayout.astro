@@ -1,0 +1,107 @@
+---
+import Footer from '@/components/Footer.astro';
+import Header from '@/components/Header.astro';
+import {sitePath} from '@/lib/routes';
+import {siteBuildId} from '@/lib/site-build';
+import '@/styles/global.css';
+
+interface Props {
+	title: string;
+	description: string;
+	indexForSearch?: boolean;
+	includeCanonical?: boolean;
+	robots?: string;
+}
+
+const {
+	title,
+	description,
+	indexForSearch = false,
+	includeCanonical = true,
+	robots,
+} = Astro.props;
+
+const siteTitle = 'Fluxer Bot Platform';
+const pageTitle = title === siteTitle ? title : `${title} | ${siteTitle}`;
+const canonical = includeCanonical ? new URL(Astro.url.pathname, Astro.site) : undefined;
+const versionUrl = sitePath('/version.json');
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width" />
+		<meta name="generator" content={Astro.generator} />
+		<meta name="site-build" content={siteBuildId} />
+		<meta name="theme-color" content="#0b0d10" />
+		<meta name="color-scheme" content="dark" />
+		<meta name="description" content={description} />
+		{robots && <meta name="robots" content={robots} />}
+		{canonical && <link rel="canonical" href={canonical} />}
+		<link rel="icon" type="image/svg+xml" href={sitePath('/favicon.svg')} />
+		<meta property="og:type" content="website" />
+		<meta property="og:title" content={pageTitle} />
+		<meta property="og:description" content={description} />
+		{canonical && <meta property="og:url" content={canonical} />}
+		<meta name="twitter:card" content="summary" />
+		<meta name="twitter:title" content={pageTitle} />
+		<meta name="twitter:description" content={description} />
+		<title>{pageTitle}</title>
+	</head>
+	<body>
+		<a class="skip-link" href="#main-content">Skip to content</a>
+		<Header />
+		<main id="main-content" data-pagefind-body={indexForSearch ? true : undefined}>
+			<slot />
+		</main>
+		<Footer />
+		<script is:inline define:vars={{siteBuildId, versionUrl}}>
+			const buildParameter = '_site_build';
+
+			function removeBuildParameter() {
+				const currentUrl = new URL(window.location.href);
+				if (!currentUrl.searchParams.has(buildParameter)) return;
+				currentUrl.searchParams.delete(buildParameter);
+				window.history.replaceState(window.history.state, '', currentUrl.toString());
+			}
+
+			async function refreshOutdatedPage() {
+				if (siteBuildId === 'development') {
+					removeBuildParameter();
+					return;
+				}
+
+				const checkUrl = new URL(versionUrl, window.location.origin);
+				checkUrl.searchParams.set('check', Date.now().toString(36));
+
+				try {
+					const response = await fetch(checkUrl, {
+						cache: 'no-store',
+						headers: {'Cache-Control': 'no-cache'},
+					});
+					if (!response.ok) return;
+
+					const payload = await response.json();
+					if (typeof payload.build !== 'string' || payload.build.length === 0) return;
+					if (payload.build === siteBuildId) {
+						removeBuildParameter();
+						return;
+					}
+
+					const currentUrl = new URL(window.location.href);
+					if (currentUrl.searchParams.get(buildParameter) === payload.build) return;
+					currentUrl.searchParams.set(buildParameter, payload.build);
+					window.location.replace(currentUrl.toString());
+				} catch {
+					// A failed version check should never prevent the page from loading.
+				}
+			}
+
+			void refreshOutdatedPage();
+			window.addEventListener('pageshow', (event) => {
+				if (event.persisted) void refreshOutdatedPage();
+			});
+		</script>
+	</body>
+</html>

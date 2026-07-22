@@ -1,0 +1,56 @@
+name: Deploy blueprint to GitHub Pages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      SITE_BUILD_ID: ${{ github.sha }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Install, validate, build, and upload
+        uses: withastro/action@v6
+        with:
+          path: ./web
+          node-version: 24
+          package-manager: pnpm@11.15.1
+          build-cmd: pnpm run check && pnpm run build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
+      - name: Verify published revision
+        env:
+          EXPECTED_BUILD: ${{ github.sha }}
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          for attempt in {1..30}; do
+            version_url="${PAGE_URL%/}/version.json?build=${EXPECTED_BUILD}&attempt=${attempt}"
+            response="$(curl --fail --silent --show-error --header 'Cache-Control: no-cache' "${version_url}" || true)"
+            if jq --exit-status --arg expected "${EXPECTED_BUILD}" '.build == $expected' <<<"${response}" >/dev/null 2>&1; then
+              echo "GitHub Pages is serving build ${EXPECTED_BUILD}."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "GitHub Pages did not serve build ${EXPECTED_BUILD} within 60 seconds."
+          exit 1

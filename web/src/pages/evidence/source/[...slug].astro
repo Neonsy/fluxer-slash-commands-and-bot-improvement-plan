@@ -1,0 +1,132 @@
+---
+import {getCollection, render, type CollectionEntry} from 'astro:content';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import {sitePath} from '@/lib/routes';
+
+export async function getStaticPaths() {
+	const documents = await getCollection('research');
+	return documents.map((entry) => ({params: {slug: entry.id}, props: {entry}}));
+}
+
+const {entry} = Astro.props as {entry: CollectionEntry<'research'>};
+const {Content, headings} = await render(entry);
+const sourceBody = entry.body ?? '';
+const sourceTitle = sourceBody.match(/^#\s+(.+)$/m)?.[1] ?? entry.id.split('/').at(-1)?.replaceAll('-', ' ') ?? entry.id;
+const title = sourceTitle;
+const sourceFile = entry.filePath?.split('/Research/').at(-1) ?? `${entry.id}.md`;
+const documents = await getCollection('research');
+const guide = documents.filter((document) => document.id.startsWith('guide/')).sort((a, b) => a.id.localeCompare(b.id));
+const guideIndex = guide.findIndex((document) => document.id === entry.id);
+const previousGuide = guideIndex > 0 ? guide[guideIndex - 1] : undefined;
+const nextGuide = guideIndex >= 0 && guideIndex < guide.length - 1 ? guide[guideIndex + 1] : undefined;
+const outline = headings.filter(
+	(heading) => heading.depth >= 2 && heading.depth <= 3 && !(guideIndex >= 0 && heading.slug === 'continue-reading'),
+);
+const scenarioTitles = new Map(
+	[...sourceBody.matchAll(/^##\s+(SIM-[A-Z]\d{2})\s*\n+\*\*(.+?)\*\*\s*$/gm)]
+		.map((match) => [match[1], match[2]]),
+);
+
+function outlineLabel(text: string) {
+	const scenarioTitle = scenarioTitles.get(text);
+	return scenarioTitle ? `${text}: ${scenarioTitle}` : text;
+}
+
+function titleFor(document: CollectionEntry<'research'> | undefined) {
+	return document?.body?.match(/^#\s+(.+)$/m)?.[1] ?? document?.id.split('/').at(-1)?.replaceAll('-', ' ');
+}
+
+function sourceKind(id: string) {
+	if (id === 'readme') return 'Research overview';
+	if (id === 'guide/11-open-decisions') return 'Open decisions';
+	if (id.startsWith('guide/')) return 'Guide';
+	if (id === 'reference/current-state') return 'Current state';
+	if (id === 'reference/acceptance-scenarios') return 'Acceptance scenarios';
+	if (id === 'reference/compatibility') return 'Compatibility';
+	if (id === 'reference/glossary') return 'Glossary';
+	return 'Technical reference';
+}
+
+function descriptionFor(body = '', fallback: string) {
+	const paragraph = body
+		.split(/\n\s*\n/)
+		.map((part) => part.trim())
+		.find((part) => part && !/^(?:#|\||```|[-*]\s|\d+\.\s)/.test(part));
+	if (!paragraph) return fallback;
+	const description = paragraph
+		.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+		.replace(/[*_`]/g, '')
+		.replace(/\s+/g, ' ');
+	if (description.length <= 190) return description;
+	return `${description.slice(0, 190).replace(/\s+\S*$/, '').replace(/[,:]$/, '')}...`;
+}
+---
+
+<BaseLayout title={title} description={descriptionFor(entry.body, `${sourceKind(entry.id)} for ${title}.`)} indexForSearch>
+	<div class="source-layout shell" data-source-file={sourceFile}>
+		<aside class="source-sidebar" data-pagefind-ignore>
+			<a class="back-link" href={sitePath('/evidence/')}>← Research</a>
+			<div class="source-file-meta">
+				<span class="source-kind">{sourceKind(entry.id)}</span>
+				<code>Research/{sourceFile}</code>
+				{guideIndex >= 0 && <span>Guide {guideIndex + 1} of {guide.length}</span>}
+			</div>
+			{outline.length > 0 && (
+				<nav class="desktop-outline" aria-label="Document contents">
+					<span>Contents</span>
+					{outline.map((heading) => <a class:list={[`depth-${heading.depth}`]} href={`#${heading.slug}`}>{outlineLabel(heading.text)}</a>)}
+				</nav>
+			)}
+			{outline.length > 0 && (
+				<details class="mobile-outline">
+					<summary>On this page</summary>
+					<nav aria-label="Document contents">
+						{outline.map((heading) => <a class:list={[`depth-${heading.depth}`]} href={`#${heading.slug}`}>{outlineLabel(heading.text)}</a>)}
+					</nav>
+				</details>
+			)}
+		</aside>
+		<div class="source-main">
+			<article class="research-prose" data-guide-document={guideIndex >= 0 ? '' : undefined}><Content /></article>
+			{guideIndex >= 0 && (
+				<nav class="chapter-navigation" aria-label="Guide chapter navigation" data-pagefind-ignore>
+					{previousGuide ? (
+						<a class="chapter-link previous" href={sitePath(`/evidence/source/${previousGuide.id}/`)}>
+							<span>Previous</span>
+							<strong>{titleFor(previousGuide)}</strong>
+						</a>
+					) : <span></span>}
+					{nextGuide ? (
+						<a class="chapter-link next" href={sitePath(`/evidence/source/${nextGuide.id}/`)}>
+							<span>Next</span>
+							<strong>{titleFor(nextGuide)}</strong>
+						</a>
+					) : (
+						<a class="chapter-link next" href={sitePath('/evidence/')}>
+							<strong>Return to research</strong>
+						</a>
+					)}
+				</nav>
+			)}
+		</div>
+	</div>
+
+	<script>
+		import {trackDocumentOutline} from '@/lib/document-outline';
+
+		const shell = document.querySelector<HTMLElement>('[data-source-file]');
+		if (shell) {
+			const marker = new URLSearchParams(window.location.search).get('ref');
+			if (marker) {
+				const heading = [...shell.querySelectorAll<HTMLElement>('.research-prose h2, .research-prose h3, .research-prose h4')].find((item) => item.textContent?.includes(marker));
+				if (heading) {
+					heading.classList.add('referenced-heading');
+					requestAnimationFrame(() => heading.scrollIntoView({block: 'start'}));
+				}
+			}
+
+			for (const table of shell.querySelectorAll<HTMLTableElement>('.research-prose table')) table.tabIndex = 0;
+			trackDocumentOutline(shell);
+		}
+	</script>
+</BaseLayout>

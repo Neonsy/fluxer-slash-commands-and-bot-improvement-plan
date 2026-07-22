@@ -1,0 +1,540 @@
+---
+import {getCollection} from 'astro:content';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import {sitePath} from '@/lib/routes';
+
+type DocumentGroup = 'guide' | 'decisions' | 'reference' | 'current' | 'scenarios' | 'compatibility';
+
+const researchDocs = await getCollection('research');
+
+function titleFor(body = '', id: string) {
+	return body.match(/^#\s+(.+)$/m)?.[1] ?? id.split('/').at(-1)?.replaceAll('-', ' ') ?? id;
+}
+
+function groupFor(id: string): DocumentGroup {
+	if (id === 'guide/11-open-decisions') return 'decisions';
+	if (id === 'readme' || id.startsWith('guide/')) return 'guide';
+	if (id === 'reference/current-state') return 'current';
+	if (id === 'reference/acceptance-scenarios') return 'scenarios';
+	if (id === 'reference/compatibility') return 'compatibility';
+	return 'reference';
+}
+
+const documentPurposes: Record<string, string> = {
+	readme: 'How the research is organized and where to begin.',
+	'guide/01-orientation': 'What Fluxer supports today, what is missing, who the plan is for, and what is in scope.',
+	'guide/02-system-model': 'Applications, installations, commands, interactions, responses, and their owners.',
+	'guide/03-first-working-bot': 'One bot from application setup through its first public response and uninstall.',
+	'guide/04-applications-and-installations': 'Install permission choices, managed roles, lifecycle controls, and how existing bots enter the new model.',
+	'guide/05-commands-and-discovery': 'Command registration, discovery, permissions, preferences, and retirement.',
+	'guide/06-interactions-and-responses': 'Interaction delivery, response timing, messages, components, and failure handling.',
+	'guide/07-community-management': 'Hosted settings, app-owned messages, self-role panels, moderation, and recovery.',
+	'guide/08-authority-safety-and-data': 'When actions use the current user, the bot, or both, plus safety, audit, privacy, and data handling.',
+	'guide/09-failure-recovery-and-operations': 'Failure states, reconciliation, recovery, suspension, and operations.',
+	'guide/10-implementation-roadmap': 'Implementation order, dependencies, rollout gates, and tests.',
+	'guide/11-open-decisions': 'Decisions still needed before work or release can proceed.',
+	'reference/acceptance-scenarios': 'Release cases for normal behavior, concurrent changes, failure, and recovery.',
+	'reference/administration-and-authority-contracts': 'Administration, delegated authority, settings, and audit rules.',
+	'reference/application-and-installation-contracts': 'Application identity, installation, lifecycle, and suspension rules.',
+	'reference/command-contracts': 'Command registration, schemas, discovery, authority, and lifecycle rules.',
+	'reference/compatibility': 'Compatibility target, deliberate differences, fixtures, and tests.',
+	'reference/current-state': 'What Fluxer supports at the verified baseline.',
+	'reference/glossary': 'Definitions and links to the detailed technical files.',
+	'reference/interaction-and-message-contracts': 'Interaction transport, responses, messages, components, and ephemeral behavior.',
+	'reference/operations-and-data-contracts': 'Persistence, privacy, retention, recovery, rollout, and operations rules.',
+};
+
+const searchAliases: Record<string, string[]> = {
+	'guide/04-applications-and-installations': [
+		'how uninstall works',
+		'remove an application',
+		'app removal',
+		'broken installation',
+		'installation failure',
+		'repair an installation',
+		'how bot permissions are requested',
+		'invite permissions',
+		'code defined permissions',
+		'permission ceiling',
+		'managed bot role',
+		'existing bot migration',
+	],
+	'guide/05-commands-and-discovery': [
+		'duplicate slash commands',
+		'duplicate commands',
+		'same command name',
+		'command collision',
+		'which app runs a command',
+	],
+	'guide/06-interactions-and-responses': [
+		'private response',
+		'private responses',
+		'ephemeral response',
+		'recipient-only response',
+		'recipient-only responses',
+		'response only i can see',
+	],
+	'guide/07-community-management': [
+		'manage installed apps',
+		'community app settings',
+		'bot administration',
+		'publish an app message',
+		'self role panel',
+	],
+	'guide/08-authority-safety-and-data': [
+		'act as the user',
+		'act as the bot',
+		'user bot or both',
+		'delegated permissions',
+	],
+	'guide/10-implementation-roadmap': [
+		'build sequence',
+		'implementation order',
+		'what gets built first',
+	],
+	'guide/11-open-decisions': [
+		'unanswered questions',
+		'pending decisions',
+		'what is still undecided',
+	],
+	'reference/current-state': [
+		'what exists today',
+		'existing behavior',
+		'existing fluxer',
+		'current implementation',
+		'what is already built',
+	],
+};
+
+const documents = researchDocs
+	.map((entry) => {
+		const chapterMatch = entry.id.match(/^guide\/(\d{2})-/);
+		return {
+			id: entry.id,
+			title: titleFor(entry.body, entry.id),
+			group: groupFor(entry.id),
+			purpose: documentPurposes[entry.id] ?? 'Additional research for the plan.',
+			aliases: searchAliases[entry.id] ?? [],
+			chapter: chapterMatch ? Number(chapterMatch[1]) : undefined,
+			sourceFile: entry.filePath?.split('/Research/').at(-1) ?? `${entry.id}.md`,
+			href: sitePath(`/evidence/source/${entry.id}/`),
+		};
+	})
+	.sort((a, b) => {
+		if (a.id === 'readme') return -1;
+		if (b.id === 'readme') return 1;
+		return a.id.localeCompare(b.id);
+	});
+
+const groupLabels: Record<string, string> = {
+	all: 'All files',
+	guide: 'Guide chapters',
+	decisions: 'Open decisions',
+	reference: 'Technical contracts',
+	current: 'Current state',
+	scenarios: 'Acceptance scenarios',
+	compatibility: 'Compatibility',
+};
+
+const sourceHref = (id: string) => sitePath(`/evidence/source/${id}/`);
+
+const startPaths = [
+	{
+		label: 'Complete path',
+		description: 'Read the public source in order, from the initial orientation through the full technical guide and exact reference contracts.',
+		href: sourceHref('readme'),
+		target: 'Research guide',
+	},
+	{
+		label: 'New to Fluxer',
+		description: 'Learn how Fluxer works today, the terms used in the plan, what is missing, and what the plan covers.',
+		href: sourceHref('guide/01-orientation'),
+		target: 'Orientation',
+	},
+	{
+		label: 'Existing Fluxer',
+		description: 'See the repository behavior this plan starts from.',
+		href: sourceHref('reference/current-state'),
+		target: 'Verified current state',
+	},
+	{
+		label: 'First bot',
+		description: 'See how a bot goes from setup to its first response.',
+		href: sourceHref('guide/03-first-working-bot'),
+		target: 'First working bot',
+	},
+	{
+		label: 'Installation and permissions',
+		description: 'See how invite and code-defined permissions, managed roles, and existing bots are handled.',
+		href: sourceHref('guide/04-applications-and-installations'),
+		target: 'Applications and installations',
+	},
+	{
+		label: 'Build order',
+		description: 'See the implementation sequence, dependencies, rollout gates, and tests.',
+		href: sourceHref('guide/10-implementation-roadmap'),
+		target: 'Implementation roadmap',
+	},
+	{
+		label: 'Security and data',
+		description: 'See how Fluxer checks authority, handles private data, and limits unsafe actions.',
+		href: sourceHref('guide/08-authority-safety-and-data'),
+		target: 'Authority, safety, and data',
+	},
+	{
+		label: 'Look up a detail',
+		description: 'Find definitions and links to exact rules, limits, and release checks.',
+		href: sourceHref('reference/glossary'),
+		target: 'Glossary',
+	},
+	{
+		label: 'Unresolved decisions',
+		description: 'See what is still undecided and what cannot start until those choices are made.',
+		href: sourceHref('guide/11-open-decisions'),
+		target: 'Open decisions',
+	},
+];
+
+const reviewTracks = [
+	{
+		label: 'Product behavior and moderation',
+		description: 'Installation, commands, community controls, moderation, and release examples.',
+		documents: [
+			['guide/01-orientation', 'Orientation'],
+			['guide/03-first-working-bot', 'First working bot'],
+			['guide/04-applications-and-installations', 'Applications and installations'],
+			['guide/05-commands-and-discovery', 'Commands and discovery'],
+			['guide/07-community-management', 'Community management'],
+			['reference/acceptance-scenarios', 'Acceptance scenarios'],
+		],
+	},
+	{
+		label: 'API and compatibility',
+		description: 'Object model, registration, interaction boundaries, and compatibility target.',
+		documents: [
+			['guide/02-system-model', 'System model'],
+			['reference/application-and-installation-contracts', 'Application and installation contracts'],
+			['reference/command-contracts', 'Command contracts'],
+			['reference/interaction-and-message-contracts', 'Interaction and message contracts'],
+			['reference/compatibility', 'Compatibility contract'],
+		],
+	},
+	{
+		label: 'Responsive web and accessibility',
+		description: 'Discovery, interaction, administration, and release scenarios for user-facing behavior.',
+		documents: [
+			['guide/05-commands-and-discovery', 'Commands and discovery'],
+			['guide/06-interactions-and-responses', 'Interactions and responses'],
+			['reference/administration-and-authority-contracts', 'Administration and authority contracts'],
+			['reference/acceptance-scenarios', 'Acceptance scenarios'],
+		],
+	},
+	{
+		label: 'Security and authorization',
+		description: 'Authority boundaries, delegated operations, audit evidence, and abuse controls.',
+		documents: [
+			['guide/04-applications-and-installations', 'Applications and installations'],
+			['guide/08-authority-safety-and-data', 'Authority, safety, and data'],
+			['reference/administration-and-authority-contracts', 'Administration and authority contracts'],
+			['reference/operations-and-data-contracts', 'Operations and data contracts'],
+			['reference/acceptance-scenarios', 'Acceptance scenarios'],
+		],
+	},
+	{
+		label: 'Privacy, moderation, and safety',
+		description: 'Moderation workflows, data handling, evidence lifecycle, and operational response.',
+		documents: [
+			['guide/07-community-management', 'Community management'],
+			['guide/08-authority-safety-and-data', 'Authority, safety, and data'],
+			['guide/09-failure-recovery-and-operations', 'Failure, recovery, and operations'],
+			['reference/operations-and-data-contracts', 'Operations and data contracts'],
+		],
+	},
+	{
+		label: 'Persistence and recovery',
+		description: 'Stored state, cleanup, reconciliation, disaster recovery, and failure scenarios.',
+		documents: [
+			['guide/09-failure-recovery-and-operations', 'Failure, recovery, and operations'],
+			['reference/operations-and-data-contracts', 'Operations and data contracts'],
+			['reference/acceptance-scenarios', 'Acceptance scenarios'],
+		],
+	},
+	{
+		label: 'Release and operations',
+		description: 'What exists now, what remains undecided, build order, rollout, and release checks.',
+		documents: [
+			['reference/current-state', 'Verified current state'],
+			['guide/10-implementation-roadmap', 'Implementation roadmap'],
+			['guide/11-open-decisions', 'Open decisions'],
+			['reference/compatibility', 'Compatibility contract'],
+			['reference/acceptance-scenarios', 'Acceptance scenarios'],
+		],
+	},
+] as const;
+---
+
+<BaseLayout title="Research and technical details" description="Background, technical design, and release checks for the Fluxer Bot Platform PRD.">
+	<header class="page-header shell" data-pagefind-ignore>
+		<h1>Research and technical details</h1>
+		<p>No dev-chat history or Fluxer repository knowledge is required. Choose Complete path for a front-to-back read. If Fluxer or bot platforms are new to you, begin with Orientation. You can also go directly to a review area below.</p>
+		<section class="evidence-search-panel" aria-labelledby="research-search-heading">
+			<div class="evidence-section-intro">
+				<h2 id="research-search-heading">Search the research</h2>
+			</div>
+			<label class="evidence-search">
+				<span>Search</span>
+				<input id="evidence-search" type="search" placeholder="For example, how uninstall works" autocomplete="off" aria-label="Search research files" />
+				<kbd>⌘ K</kbd>
+			</label>
+			<p id="search-status" class="search-status" aria-live="polite"></p>
+			<div id="pagefind-results" class="document-index" hidden></div>
+		</section>
+	</header>
+
+	<div class="shell evidence-shell" data-pagefind-ignore>
+		<section class="evidence-start" aria-labelledby="start-here-heading">
+			<div class="evidence-section-intro">
+				<h2 id="start-here-heading">Pick a starting point</h2>
+			</div>
+			<div class="start-path-grid">
+				{startPaths.map((path) => (
+					<a class="start-path-card" href={path.href}>
+						<span class="document-type">{path.label}</span>
+						<strong>{path.target}</strong>
+						<small>{path.description}</small>
+					</a>
+				))}
+			</div>
+		</section>
+
+		<section class="evidence-review-tracks" aria-labelledby="review-tracks-heading">
+			<div class="evidence-section-intro">
+				<h2 id="review-tracks-heading">Research by area</h2>
+			</div>
+			<div class="responsibility-track-list">
+				{reviewTracks.map((track) => (
+					<section class="responsibility-track">
+						<div class="responsibility-track-summary">
+							<h3>{track.label}</h3>
+							<p>{track.description}</p>
+						</div>
+						<ul>
+							{track.documents.map(([id, label]) => (
+								<li>
+									<a href={sourceHref(id)}>
+										<span>{label}</span>
+										<span aria-hidden="true">→</span>
+									</a>
+								</li>
+							))}
+						</ul>
+					</section>
+				))}
+			</div>
+		</section>
+
+		<section class="evidence-source-index" aria-labelledby="source-index-heading">
+			<div class="evidence-section-intro">
+				<h2 id="source-index-heading">Browse all research files</h2>
+			</div>
+
+			<div class="evidence-filters" role="group" aria-label="Filter research by source type">
+				{Object.entries(groupLabels).map(([key, label]) => (
+					<button type="button" class:list={{active: key === 'all'}} data-filter={key} aria-pressed={key === 'all'}>{label}</button>
+				))}
+			</div>
+			<p id="filter-status" class="filter-status" aria-live="polite"></p>
+
+			<div id="document-index" class="document-index">
+				{documents.map((document) => (
+					<a
+						class:list={['document-row', {'decision-document-row': document.group === 'decisions'}]}
+						href={document.href}
+						data-group={document.group}
+						data-aliases={document.aliases.join(' ').toLowerCase()}
+					>
+						<span class="document-type">
+							{document.chapter && document.group === 'guide' ? `Chapter ${document.chapter}` : groupLabels[document.group]}
+						</span>
+						<span class="document-name">
+							<strong>{document.title}</strong>
+							<small>{document.purpose}</small>
+							<code>Research/{document.sourceFile}</code>
+						</span>
+						<span aria-hidden="true">→</span>
+					</a>
+				))}
+			</div>
+		</section>
+	</div>
+
+	<script>
+		import {sitePath} from '@/lib/routes';
+
+		type PagefindSubResult = {
+			title?: string;
+			url: string;
+			excerpt: string;
+			locations?: number[];
+		};
+
+		type PagefindData = {
+			url: string;
+			meta: {title?: string};
+			excerpt: string;
+			sub_results?: PagefindSubResult[];
+		};
+
+		const resultGroupLabels: Record<string, string> = {
+			guide: 'Guide chapters',
+			decisions: 'Open decisions',
+			reference: 'Technical contracts',
+			current: 'Current state',
+			scenarios: 'Acceptance scenarios',
+			compatibility: 'Compatibility',
+		};
+
+		function groupForResult(url: string) {
+			if (url.includes('/evidence/source/guide/11-open-decisions/')) return 'decisions';
+			if (url.includes('/evidence/source/readme/') || url.includes('/evidence/source/guide/')) return 'guide';
+			if (url.includes('/evidence/source/reference/current-state/')) return 'current';
+			if (url.includes('/evidence/source/reference/acceptance-scenarios/')) return 'scenarios';
+			if (url.includes('/evidence/source/reference/compatibility/')) return 'compatibility';
+			return 'reference';
+		}
+
+		function plainText(html: string) {
+			return new DOMParser().parseFromString(html, 'text/html').body.textContent ?? '';
+		}
+
+		function pathFor(url: string) {
+			return new URL(url, window.location.href).pathname.replace(/\/$/, '');
+		}
+
+		function bestResult(item: PagefindData) {
+			const pageExcerpt = plainText(item.excerpt).toLowerCase();
+			const subResult = item.sub_results?.find((result) => result.title && pageExcerpt.includes(result.title.toLowerCase()))
+				?? item.sub_results?.toSorted((a, b) => (b.locations?.length ?? 0) - (a.locations?.length ?? 0))[0];
+			return {
+				url: subResult?.url ?? item.url,
+				title: subResult?.title,
+				excerpt: subResult?.excerpt ?? item.excerpt,
+			};
+		}
+
+		const input = document.querySelector<HTMLInputElement>('#evidence-search');
+		const results = document.querySelector<HTMLElement>('#pagefind-results');
+		const status = document.querySelector<HTMLElement>('#search-status');
+		const filterStatus = document.querySelector<HTMLElement>('#filter-status');
+		const filterButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-filter]')];
+		const documentRows = [...document.querySelectorAll<HTMLElement>('.document-row')];
+		let activeFilter = 'all';
+		let requestSequence = 0;
+		let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+		function matchingDocumentRows(query: string) {
+			const normalized = query.trim().toLowerCase();
+			if (!normalized) return [];
+			return documentRows.filter((row) => row.dataset.aliases?.includes(normalized));
+		}
+
+		function applyDocumentFilter() {
+			let visible = 0;
+			for (const row of documentRows) {
+				const matchesFilter = activeFilter === 'all' || row.dataset.group === activeFilter;
+				row.hidden = !matchesFilter;
+				if (!row.hidden) visible += 1;
+			}
+			if (filterStatus) filterStatus.textContent = activeFilter === 'all' ? '' : `${visible} file${visible === 1 ? '' : 's'} shown`;
+		}
+
+		async function search(query: string) {
+			const sequence = ++requestSequence;
+			const normalized = query.trim();
+			if (normalized.length < 2) {
+				if (results) results.hidden = true;
+				if (status) status.textContent = '';
+				return;
+			}
+
+			if (results) results.hidden = true;
+			try {
+				const pagefind = await import(/* @vite-ignore */ sitePath('/pagefind/pagefind.js'));
+				await pagefind.init();
+				const response = await pagefind.search(normalized);
+				if (sequence !== requestSequence) return;
+				const data = await Promise.all(response.results.map((result: {data: () => Promise<PagefindData>}) => result.data()));
+				if (sequence !== requestSequence) return;
+				const filtered = data.filter((item) => item.url.includes('/evidence/source/'));
+				if (!results || !status || sequence !== requestSequence) return;
+				const resultRows = document.createDocumentFragment();
+				const includedPaths = new Set<string>();
+				let resultCount = 0;
+				for (const row of matchingDocumentRows(normalized)) {
+					const clone = row.cloneNode(true) as HTMLElement;
+					clone.classList.add('search-result');
+					resultRows.append(clone);
+					includedPaths.add(pathFor((row as HTMLAnchorElement).href));
+					resultCount += 1;
+				}
+				for (const item of filtered.slice(0, 30)) {
+					if (includedPaths.has(pathFor(item.url))) continue;
+					const best = bestResult(item);
+					const link = document.createElement('a');
+					link.className = 'document-row search-result';
+					link.href = best.url;
+					const type = document.createElement('span');
+					type.className = 'document-type';
+					type.textContent = resultGroupLabels[groupForResult(item.url)];
+					const body = document.createElement('span');
+					body.className = 'document-name';
+					const title = document.createElement('strong');
+					title.textContent = best.title ? `${item.meta.title ?? 'Research result'}: ${best.title}` : item.meta.title ?? 'Research result';
+					const excerpt = document.createElement('small');
+					excerpt.textContent = plainText(best.excerpt);
+					body.append(title, excerpt);
+					const arrow = document.createElement('span');
+					arrow.textContent = '→';
+					link.append(type, body, arrow);
+					resultRows.append(link);
+					resultCount += 1;
+				}
+				if (sequence !== requestSequence) return;
+				results.replaceChildren(resultRows);
+				results.hidden = false;
+				status.textContent = `${resultCount} result${resultCount === 1 ? '' : 's'}`;
+			} catch {
+				if (sequence === requestSequence && status) status.textContent = 'Search is unavailable in this preview.';
+			}
+		}
+
+		function scheduleSearch(query: string) {
+			requestSequence += 1;
+			if (debounceTimer) clearTimeout(debounceTimer);
+			if (results) results.hidden = true;
+			if (status) status.textContent = query.trim().length < 2 ? '' : 'Searching…';
+			debounceTimer = setTimeout(() => void search(query), 180);
+		}
+
+		for (const button of filterButtons) {
+			button.addEventListener('click', () => {
+				activeFilter = button.dataset.filter ?? 'all';
+				for (const item of filterButtons) {
+					const selected = item === button;
+					item.classList.toggle('active', selected);
+					item.setAttribute('aria-pressed', String(selected));
+				}
+				applyDocumentFilter();
+			});
+		}
+
+		input?.addEventListener('input', () => scheduleSearch(input.value));
+		document.addEventListener('keydown', (event) => {
+			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && input && document.activeElement !== input) {
+				event.preventDefault();
+				input.focus();
+			}
+		});
+		applyDocumentFilter();
+	</script>
+</BaseLayout>
